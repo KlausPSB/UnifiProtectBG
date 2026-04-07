@@ -1,28 +1,28 @@
 <?php
 
 declare(strict_types=1);
-	class UnifiProtectConfigurator extends IPSModule
+	class UnifiProtectConfigurator extends IPSModuleStrict
 	{
-		public function Create()
+		public function Create():void
 		{
 			//Never delete this line!
 			parent::Create();
-			$this->ConnectParent('{3F49B3E6-093C-40FA-661C-3D31BE37AEA3}');
 		}
 
-		public function Destroy()
+
+		public function Destroy():void
 		{
 			//Never delete this line!
 			parent::Destroy();
 		}
 
-		public function ApplyChanges()
+		public function ApplyChanges():void
 		{
 			//Never delete this line!
 			parent::ApplyChanges();
 		}
 
-		public function Send(string $api, string $param1)
+		public function Send(string $api, string $param1):void
 		{
 			if ($this->HasActiveParent()) {
 				$data=$this->SendDataToParent(json_encode(['DataID' => '{BBE44630-5AEE-27A0-7D2E-E1D2D776B83B}',
@@ -49,7 +49,7 @@ declare(strict_types=1);
 		}	
 
 
-		public function GetConfigurationForm()
+		public function GetConfigurationForm():string
 		{
 			if ($this->HasActiveParent()) {
 				$this->Send("getDevicesConfig","");
@@ -60,7 +60,6 @@ declare(strict_types=1);
 			$arrayStatus[] = array( 'code' => 102, 'icon' => 'active', 'caption' => $this->Translate('Instanz ist aktiv') );
 			$arrayStatus[] = array( 'code' => 104, 'icon' => 'inactive', 'caption' => $this->Translate('Instanz ist inaktiv') );
 			$arraySort = array();
-			#$arraySort = array( 'column' => 'Name', 'direction' => 'ascending' );
 
 			$arrayColumns = array();
 			$arrayColumns[] = array( 'caption' => 'Name', 'name' => 'Name', 'width' => 'auto', 'add' => '' );

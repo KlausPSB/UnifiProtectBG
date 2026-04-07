@@ -1,9 +1,9 @@
 <?php
 
 declare(strict_types=1);
-	class UnifiProtectGateway extends IPSModule
+	class UnifiProtectGateway extends IPSModuleStrict
 	{
-		public function Create()
+		public function Create():void
 		{
 			//Never delete this line!
 			parent::Create();
@@ -12,13 +12,13 @@ declare(strict_types=1);
 			$this->RegisterPropertyBoolean('applicationVersion', 0);
 		}
 
-		public function Destroy()
+		public function Destroy():void
 		{
 			//Never delete this line!
 			parent::Destroy();
 		}
 
-		public function ApplyChanges()
+		public function ApplyChanges():void
 		{
 			//Never delete this line!
 			parent::ApplyChanges();
@@ -36,7 +36,7 @@ declare(strict_types=1);
 			}
 		}
 
-		public function ForwardData($JSONString)
+		public function ForwardData($JSONString):string
 		{
 			$data = json_decode( $JSONString );
 			#Message('UnifiPGW', $JSONString);
@@ -52,53 +52,48 @@ declare(strict_types=1);
 
 			if (isset($data->Api)) {
 				switch ($data->Api) {
+					case 'setAlarmManager':
+						$this->setAlarmManager($data->Param1);
+						return serialize([]);
 					case "getDevices":
 						$array = $this->getDevices($data->Param1);
-						return serialize($array);
-						break;
+						return serialize($array);						
 					case "getStreams":
-						$this->SendDebug("UnifiPGW", "Get Streams for CameraID: " . IPS_GetProperty( $data->InstanceID, 'ID' ), 0);
-						$array = $this->getStreams(IPS_GetProperty( $data->InstanceID, 'ID' ));
+						$this->SendDebug("UnifiPGW", "Get Streams for CameraID: " . $data->ID, 0);
+						$array = $this->getStreams($data->ID);
 						return serialize($array);
-						break;
 					case "getSnapshot":
 						$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
 						$APIKey = $this->ReadPropertyString( 'APIKey' );
-						$cameraID = IPS_GetProperty( $data->InstanceID, 'ID' );
+						$cameraID = $data->ID;
 						$url = 'https://'.$ServerAddress.'/proxy/protect/integration/v1/cameras/' . $cameraID . '/snapshot?forceHighQuality=true';
 						$array = array('apikey' => $APIKey, 'url' => $url);
 						$this->SendDebug("UnifiPGW", "Snapshot: " . json_encode($array), 0);
 						return serialize($array);
-						break;
 					case "createStream":
-						$this->SendDebug("UnifiPGW", "Create Streams for CameraID: " . IPS_GetProperty( $data->InstanceID, 'ID' ), 0);
-						$stream = $this->createStream(IPS_GetProperty( $data->InstanceID, 'ID' ), $data->Param1);
+						$this->SendDebug("UnifiPGW", "Create Streams for CameraID: " . $data->ID, 0);
+						$stream = $this->createStream($data->ID, $data->Param1);
 						return serialize($stream);
-						break;
 					case "getDeviceData":
-						$deviceData = $this->getDeviceData(IPS_GetProperty( $data->InstanceID, 'ID' ), $data->Param1);
+						$deviceData = $this->getDeviceData($data->ID, $data->Param1);
 						return serialize($deviceData);
-						break;
 					case "patchSettingCamera":
-						$setting = $this->patchSettingCamera(IPS_GetProperty( $data->InstanceID, 'ID' ), $data->Param1);
+						$setting = $this->patchSettingCamera($data->ID, $data->Param1);
 						return serialize($setting);
-						break;
 					case "patchSettingSensor":
-						$setting = $this->patchSettingSensor(IPS_GetProperty( $data->InstanceID, 'ID' ), $data->Param1);
+						$setting = $this->patchSettingSensor($data->ID, $data->Param1);
 						return serialize($setting);
-						break;
 					case "getDevicesConfig":
 						$config = $this->getDevicesConfig();
 						return serialize($config);
-						break;
 					default:
-						$this->SendDebug("UnifiPGW", "Unknown API: " . $api, 0);
+						$this->SendDebug("UnifiPGW", "Unknown API: " . $data->Api, 0);
 						break;
 				}
 			}
 		}
 
-		public function Send( int $id,string $Api, string $Text )
+		public function Send( int $id,string $Api, string $Text ):void
 		{
 			$this->SendDataToChildren( json_encode( [ 'DataID' => '{C7147748-F01B-E4F9-D11E-72DFA08E7048}',
 					'id' =>  $id,
@@ -108,140 +103,230 @@ declare(strict_types=1);
 
 
 
-		#https://192.168.178.1/proxy/protect/v1/cameras
-
-		public function getApiData( string $endpoint = '' ):array {
-			$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
-			$APIKey = $this->ReadPropertyString( 'APIKey' );
-
-			$ch = curl_init();
-			curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );
-			curl_setopt( $ch, CURLOPT_HTTPGET, true );
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, array( 'X-API-KEY:'.$APIKey ) );
-			curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
-			$RawData = curl_exec($ch);
-			curl_close( $ch );		
-			$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
-			if ($RawData === false) {
-				// Handle error
-				$this->SendDebug("UnifiPGW", "Curl error: " . curl_error($ch), 0);
-				$this->SetStatus( 201 ); // Set status to error
-				return [];
-			}
-			usleep(100000); // 100 ms Pause zwischen Requests
-			$JSONData = json_decode( $RawData, true );			
-			if ( isset( $JSONData[ 'statusCode' ] ) ) {
-				if ($JSONData[ 'statusCode' ]<> 200) {
-					// instance inactive
-					$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
-					$this->SetStatus( $JSONData[ 'statusCode' ] );
+		public function getApiData(string $endpoint = ''): array {
+			$maxRetries = 3;
+			$retry = 0;
+			do {
+				if (!IPS_SemaphoreEnter("UnifiProtectAPI", 50)) {
+					$this->SendDebug("UnifiPGW", "Semaphore Timeout - Request abgebrochen", 0);
+					return [];
 				}
-			}			
-			return $JSONData;
+				try {
+					$starttime = microtime(true);
+					$ServerAddress = $this->ReadPropertyString('ServerAddress');
+					$APIKey = $this->ReadPropertyString('APIKey');
+					$responseHeaders = [];
+					$ch = curl_init();
+					curl_setopt($ch, CURLOPT_URL, 'https://' . $ServerAddress . '/proxy/protect/integration/v1' . $endpoint);
+					curl_setopt($ch, CURLOPT_HTTPGET, true);
+					curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+					curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+					curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+					curl_setopt($ch, CURLOPT_HTTPHEADER, ['X-API-KEY:' . $APIKey]);
+					curl_setopt($ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1');
+					curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+					curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+					curl_setopt($ch, CURLOPT_HEADERFUNCTION, static function ($chCurl, $header) use (&$responseHeaders) {
+						$len = strlen($header);
+						$parts = explode(':', $header, 2);
+						if (count($parts) === 2) {
+							$responseHeaders[strtolower(trim($parts[0]))] = trim($parts[1]);
+						}
+						return $len;
+					});
+					$RawData = curl_exec($ch);
+					$curl_error = curl_error($ch);
+					$httpCode = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+					curl_close($ch);
+
+					$this->SendDebug("UnifiPGW", "API Endpoint: " . $RawData, 0);
+
+					if ($RawData === false) {
+						$this->SendDebug("UnifiPGW", "Curl error: " . $curl_error, 0);
+						$this->SetStatus(201);
+						return [];
+					}
+
+					if ($httpCode === 429) {
+						$retryAfterHeader = $responseHeaders['retry-after'] ?? '';
+						$retryAfter = is_numeric($retryAfterHeader) ? max(0.5, (float)$retryAfterHeader) : 0.5;
+						$this->SendDebug("UnifiPGW", "Rate Limit erreicht, warte " . $retryAfter . "s", 0);
+						$retry++;
+						usleep((int)($retryAfter * 1_000_000));
+						continue;
+					}
+
+					$JSONData = json_decode($RawData, true);
+					if (isset($JSONData['statusCode']) && $JSONData['statusCode'] !== 200) {
+						$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData['statusCode'], 0);
+						$this->SetStatus($JSONData['statusCode']);
+					}
+
+					$elapsed = microtime(true) - $starttime;
+					if ($elapsed < 0.05) {
+						usleep((int)((0.05 - $elapsed) * 1_000_000));
+					}
+					return $JSONData;
+				} finally {
+					IPS_SemaphoreLeave("UnifiProtectAPI");
+				}
+			} while ($retry < $maxRetries);
+
+			return [];
 		}
 
 		public function deleteApiData( string $endpoint = '' ):array {
-			$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
-			$APIKey = $this->ReadPropertyString( 'APIKey' );
-
-			$ch = curl_init();
-			curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, array( 'X-API-KEY:'.$APIKey ) );
-			curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
-			$RawData = curl_exec($ch);
-			curl_close( $ch );
-			$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
-			if ($RawData === false) {
-				// Handle error
-				$this->SendDebug("UnifiPGW", "Curl error: " . curl_error($ch), 0);
-				$this->SetStatus( 201 ); // Set status to error
+			if (!IPS_SemaphoreEnter("UnifiProtectAPI", 500)) {
+				$this->SendDebug("UnifiPGW", "Semaphore Timeout - Request abgebrochen", 0);
 				return [];
 			}
-			usleep(100000); // 100 ms Pause zwischen Requests
-			$JSONData = json_decode( $RawData, true );
-			if ( isset( $JSONData[ 'statusCode' ] ) ) {
-				if ($JSONData[ 'statusCode' ]<> 200) {
-					// instance inactive
-					$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
-					$this->SetStatus( $JSONData[ 'statusCode' ] );
+
+			try {
+				$starttime=microtime(true);
+				$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
+				$APIKey = $this->ReadPropertyString( 'APIKey' );
+
+				$ch = curl_init();
+				curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );
+				curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+				curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
+				curl_setopt( $ch, CURLOPT_HTTPHEADER, array( 'X-API-KEY:'.$APIKey ) );
+				curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
+				$RawData = curl_exec($ch);
+				$curl_error = curl_error($ch);  
+				curl_close( $ch );
+				$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
+				if ($RawData === false) {
+					// Handle error
+					$this->SendDebug("UnifiPGW", "Curl error: " . $curl_error, 0);
+					$this->SetStatus( 201 ); // Set status to error
+					return [];
 				}
-			}			
-			return [];
+				$JSONData = json_decode( $RawData, true );
+				if ( isset( $JSONData[ 'statusCode' ] ) ) {
+					if ($JSONData[ 'statusCode' ]<> 200) {
+						// instance inactive
+						$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
+						$this->SetStatus( $JSONData[ 'statusCode' ] );
+					}
+				}						
+				$elapsed = microtime(true) - $starttime;
+				if($elapsed < 0.05) {
+					usleep((int)((0.05 - $elapsed) * 1000000));
+				}
+				return [];
+			} finally {
+				// Semaphore freigeben
+				IPS_SemaphoreLeave("UnifiProtectAPI");
+			}
 		}
 
 		public function patchApiData( string $endpoint = '', string $PostData = '' ):array {
-			$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
-			$APIKey = $this->ReadPropertyString( 'APIKey' );
-
-			$ch = curl_init();
-			curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );
-			curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, $PostData );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json', 'X-API-KEY:'.$APIKey ) );
-			curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
-			$RawData = curl_exec($ch);
-			curl_close( $ch );
-			$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
-			if ($RawData === false) {
-				// Handle error
-				$this->SendDebug("UnifiPGW", "Curl error: " . curl_error($ch), 0);
-				$this->SetStatus( 201 ); // Set status to error
+			if (!IPS_SemaphoreEnter("UnifiProtectAPI", 500)) {
+				$this->SendDebug("UnifiPGW", "Semaphore Timeout - Request abgebrochen", 0);
 				return [];
 			}
-			usleep(100000); // 100 ms Pause zwischen Requests
-			$JSONData = json_decode( $RawData, true );
-			if ( isset( $JSONData[ 'statusCode' ] ) ) {
-				if ($JSONData[ 'statusCode' ]<> 200) {
-					// instance inactive
-					$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
-					$this->SetStatus( $JSONData[ 'statusCode' ] );
+
+			try {
+				$starttime=microtime(true);
+				$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
+				$APIKey = $this->ReadPropertyString( 'APIKey' );
+
+				$ch = curl_init();
+				curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );
+				curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PATCH');
+				curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
+				curl_setopt( $ch, CURLOPT_POSTFIELDS, $PostData );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
+				curl_setopt( $ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json', 'X-API-KEY:'.$APIKey ) );
+				curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
+				curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 10);  
+				$RawData = curl_exec($ch);
+				$curl_error = curl_error($ch); // ✅ VOR curl_close() speichern
+        		curl_close( $ch );
+				$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
+				if ($RawData === false) {
+					// Handle error
+					$this->SendDebug("UnifiPGW", "Curl error: " . $curl_error, 0);
+					$this->SetStatus( 201 ); // Set status to error
+					return [];
 				}
-			}			
-			return [];
+				$JSONData = json_decode( $RawData, true );
+				if ( isset( $JSONData[ 'statusCode' ] ) ) {
+					if ($JSONData[ 'statusCode' ]<> 200) {
+						// instance inactive
+						$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
+						$this->SetStatus( $JSONData[ 'statusCode' ] );
+					}
+				}
+				$elapsed = microtime(true) - $starttime;
+				if($elapsed < 0.05) {
+					usleep((int)((0.05 - $elapsed) * 1000000));
+				}
+				return [];
+			} finally {
+				// Semaphore freigeben
+				IPS_SemaphoreLeave("UnifiProtectAPI");
+			}
 		}
 
 		public function getApiDataPost( string $endpoint = '', string $PostData = '' ):array {
-			$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
-			$APIKey = $this->ReadPropertyString( 'APIKey' );
-			$this->SendDebug("UnifiPGW", "PostData: " . $PostData, 0);
-			$ch = curl_init();
-			curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );				
-			curl_setopt( $ch, CURLOPT_POST, true );
-			curl_setopt( $ch, CURLOPT_POSTFIELDS, $PostData );			
-			curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
-			curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
-			curl_setopt( $ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json', 'X-API-KEY:'.$APIKey ) );
-			curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
-			$RawData = curl_exec($ch);
-			curl_close( $ch );
-			$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
-			if ($RawData === false) {
-				// Handle error
-				$this->SendDebug("UnifiPGW", "Curl error: " . curl_error($ch), 0);
-				$this->SetStatus( 201 ); // Set status to error
+			if (!IPS_SemaphoreEnter("UnifiProtectAPI", 500)) {
+				$this->SendDebug("UnifiPGW", "Semaphore Timeout - Request abgebrochen", 0);
 				return [];
 			}
-			usleep(100000); // 100 ms Pause zwischen Requests
-			$JSONData = json_decode( $RawData, true );
-			if ( isset( $JSONData[ 'statusCode' ] ) ) {
-				if ($JSONData[ 'statusCode' ]<> 200) {
-					// instance inactive
-					$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
-					$this->SetStatus( $JSONData[ 'statusCode' ] );
+
+			try {
+				$starttime=microtime(true);	
+				$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
+				$APIKey = $this->ReadPropertyString( 'APIKey' );
+				$this->SendDebug("UnifiPGW", "PostData: " . $PostData, 0);
+				$ch = curl_init();
+				curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1'.$endpoint );				
+				curl_setopt( $ch, CURLOPT_POST, true );
+				curl_setopt( $ch, CURLOPT_POSTFIELDS, $PostData );			
+				curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
+				curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
+				curl_setopt( $ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json', 'X-API-KEY:'.$APIKey ) );
+				curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
+				curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 10);  
+				$RawData = curl_exec($ch);
+				$curl_error = curl_error($ch); // ✅ VOR curl_close() speichern
+        		curl_close( $ch );
+				$this->SendDebug("UnifiPGW", "API Endpoint: " .$RawData, 0);
+				if ($RawData === false) {
+					// Handle error
+					$this->SendDebug("UnifiPGW", "Curl error: " . $curl_error, 0);
+					$this->SetStatus( 201 ); // Set status to error
+					return [];
 				}
+				$JSONData = json_decode( $RawData, true );
+				if ( isset( $JSONData[ 'statusCode' ] ) ) {
+					if ($JSONData[ 'statusCode' ]<> 200) {
+						// instance inactive
+						$this->SendDebug("UnifiPGW", "Curl error: " . $JSONData[ 'statusCode' ], 0);
+						$this->SetStatus( $JSONData[ 'statusCode' ] );
+					}
+				}
+				$elapsed = microtime(true) - $starttime;
+				if($elapsed < 0.05) {
+					usleep((int)((0.05 - $elapsed) * 1000000));
+				}
+				if ( $JSONData === null ) {
+					$this->SendDebug("UnifiPGW", "JSON Decode error: " . json_last_error_msg(), 0);
+					return [];
+				}
+				return $JSONData;
+			} finally {
+				// Semaphore freigeben
+				IPS_SemaphoreLeave("UnifiProtectAPI");
 			}
-			return $JSONData;
 		}
 
 		public function getProtectVersion ():string {
@@ -276,6 +361,7 @@ declare(strict_types=1);
 
 		public function getCameras():array {			
 			$JSONData = $this->getApiData( '/cameras' );
+			$value = [];
 			if ( is_array( $JSONData ) && isset( $JSONData ) ) {
 				if (isset($JSONData)) {
 					$devices = $JSONData;
@@ -301,6 +387,7 @@ declare(strict_types=1);
 
 		public function getSensors():array {
 			$JSONData = $this->getApiData( '/sensors' );
+			$value = [];
 			if ( is_array( $JSONData ) && isset( $JSONData ) ) {
 				if (isset($JSONData)) {
 					$devices = $JSONData;
@@ -326,6 +413,7 @@ declare(strict_types=1);
 
 		public function getChimes():array {
 			$JSONData = $this->getApiData( '/chimes' );
+			$value = [];
 			if ( is_array( $JSONData ) && isset( $JSONData ) ) {
 				if (isset($JSONData)) {
 					$devices = $JSONData;
@@ -351,6 +439,7 @@ declare(strict_types=1);
 
 		public function getLights():array {
 			$JSONData = $this->getApiData( '/lights' );
+			$value = [];
 			if ( is_array( $JSONData ) && isset( $JSONData ) ) {
 				if (isset($JSONData)) {
 					$devices = $JSONData;
@@ -438,6 +527,11 @@ declare(strict_types=1);
 			json_decode($string);
 			return (json_last_error() == JSON_ERROR_NONE);
 		}
+		public function setAlarmManager(string $webhookID):array {
+			$JSONData = $this->getApiDataPost( '/alarm-manager/webhook/' . $webhookID );
+			$this->SendDebug("UnifiPGW", "setAlarmManager: " . json_encode($JSONData), 0);
+			return $JSONData;
+		}
 
 		public function getStreams(string $cameraID):array {
 			$JSONData = $this->getApiData( '/cameras/' . $cameraID . '/rtsps-stream' );
@@ -474,40 +568,7 @@ declare(strict_types=1);
 			return $JSONData;
 		}
 
-		// public function getSnapshot(string $cameraID, int $idParent):bool {
-		// 	$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
-		// 	$APIKey = $this->ReadPropertyString( 'APIKey' );
-		// 	$ch = curl_init();
-		// 	curl_setopt( $ch, CURLOPT_URL, 'https://'.$ServerAddress.'/proxy/protect/integration/v1/cameras/' . $cameraID . '/snapshot?forceHighQuality=true' );
-		// 	curl_setopt( $ch, CURLOPT_HTTPGET, true );
-		// 	curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
-		// 	curl_setopt( $ch, CURLOPT_SSL_VERIFYPEER, false );
-		// 	curl_setopt( $ch, CURLOPT_SSL_VERIFYHOST, false );
-		// 	curl_setopt( $ch, CURLOPT_HTTPHEADER, array( 'X-API-KEY:'.$APIKey ) );
-		// 	curl_setopt( $ch, CURLOPT_SSLVERSION, 'CURL_SSLVERSION_TLSv1' );
-		// 	$RawData = curl_exec($ch);
-		// 	curl_close( $ch );			
-		// 	if ($RawData === false) {
-		// 		// Handle error
-		// 		$this->SendDebug("UnifiPGW", "Curl error: " . curl_error($ch), 0);
-		// 		$this->SetStatus( 201 ); // Set status to error
-		// 		return false;
-		// 	}			
-		// 	$MedienID = IPS_GetObjectIDByIdent('Snapshot', $idParent);
-		// 	if ($MedienID > 0) {
-		// 		if (isset($RawData) && !empty($RawData)) {
-		// 			IPS_SetMediaFile($MedienID, 'Snapshot_'.$idParent.'.jpeg', FALSE);
-		// 			IPS_SetMediaContent($MedienID, base64_encode($RawData));
-		// 		} else {
-		// 			return false;
-		// 		}
-		// 	} else {
-		// 		return false;
-		// 	}
-		// 	return true;
-		// }
-
-		public function GetConfigurationForm() {
+		public function GetConfigurationForm():string {
 			$ServerAddress = $this->ReadPropertyString( 'ServerAddress' );
 			$APIKey = $this->ReadPropertyString( 'APIKey' );
 
@@ -549,6 +610,7 @@ declare(strict_types=1);
     	}
 
 		public function getDevicesConfig():array {
+			$value = [];
         	$cameras = $this->getApiData( '/cameras/' );
 			$this->SendDebug("UnifiPGW", "getDevicesConfig: " . json_encode($cameras), 0);
 			if ( is_array( $cameras ) && isset( $cameras ) )
@@ -689,7 +751,10 @@ declare(strict_types=1);
 			$instanceIDs = IPS_GetInstanceListByModuleID( $guid );
 			foreach ( $instanceIDs as $instanceID ) {
 				if ( IPS_GetProperty( $instanceID, 'ID' ) == $id ) {
-					return $instanceID;
+					$instance=IPS_GetInstance($instanceID);
+					if ($instance['ConnectionID']==$this->InstanceID) {
+						return $instanceID;
+					}
 				}
 			}
 			return 0;

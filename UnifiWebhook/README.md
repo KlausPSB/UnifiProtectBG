@@ -1,5 +1,5 @@
-# UnifiProtectGateway
-Beschreibung des Moduls.
+# UnifiWebsocket
+Diese Modul stellt verschiedene Erweiterungen bereit, um die Arbeit mit Symcon zu vereinfachen.
 
 ### Inhaltsverzeichnis
 
@@ -13,30 +13,28 @@ Beschreibung des Moduls.
 
 ### 1. Funktionsumfang
 
-*  Die Schnittstelle zwischen Symcon und der Local Unifi Protect API
+*
 
 ### 2. Voraussetzungen
 
 - IP-Symcon ab Version 8.2
-- UniFi Protect mit aktiviertem API-Zugang und gültigem API-Key
 
 ### 3. Software-Installation
 
-* Über den Module Store das 'UnifiProtect'-Modul installieren.
+* Über den Module Store das 'UnifiWebhook'-Modul installieren.
+* Alternativ über das Module Control folgende URL hinzufügen
 
 ### 4. Einrichten der Instanzen in IP-Symcon
 
- Unter 'Instanz hinzufügen' kann das 'UnifiProtectGateway'-Modul mithilfe des Schnellfilters gefunden werden.  
+ Unter 'Instanz hinzufügen' kann das 'UnifiWebhook'-Modul mithilfe des Schnellfilters gefunden werden.  
 	- Weitere Informationen zum Hinzufügen von Instanzen in der [Dokumentation der Instanzen](https://www.symcon.de/service/dokumentation/konzepte/instanzen/#Instanz_hinzufügen)
 
 __Konfigurationsseite__:
 
 Name     | Beschreibung
 -------- | ------------------
-Unifi Geräte-IP    | IP Adresse der Unifi Protect installation
-API-Schlüssel | API Key "UniFi Protect > Settings > Control Plane > Integrations" erzeugen.
-Anwendungsversion anzeigen |  Erzeugt eine Variable mit der aktuellen Unifi Protect Version.
-
+         |
+         |
 
 ### 5. Statusvariablen und Profile
 
@@ -44,24 +42,26 @@ Die Statusvariablen/Kategorien werden automatisch angelegt. Das Löschen einzeln
 
 #### Statusvariablen
 
-| Name         | Typ      | Beschreibung                |
-| ------------ | -------- | --------------------------  |
-| Application Version         | String   | Unifi Protect version                  |
-
+Name   | Typ     | Beschreibung
+------ | ------- | ------------
+       |         |
+       |         |
 
 #### Profile
 
-Keine vorhanden.
-
+Name   | Typ
+------ | -------
+       |
+       |
 
 ### 6. Visualisierung
 
-keine
+Die Funktionalität, die das Modul in der Visualisierung bietet.
 
 ### 7. PHP-Befehlsreferenz
 
-bool UNIFIPGW_getProtectVersion(int $InstanzID);
-Ruft die aktuelle Protect-Version ab.
+`boolean UNIFIPWS_BeispielFunktion(integer $InstanzID);`
+Erklärung der Funktion.
 
 Beispiel:
-UNIFIPGW_getProtectVersion(123456);
+`UNIFIPWS_BeispielFunktion(12345);`
